@@ -1,0 +1,14 @@
+# Mortgage AI Newsletter - runs at 9:00 AM EST daily
+# Note: Container timezone is set to America/New_York
+
+# Environment variables passed from Docker
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Run newsletter at 9:00 AM EST (America/New_York timezone)
+0 9 * * * root cd /app && /usr/local/bin/python -m src.main >> /app/logs/cron.log 2>&1
+
+# Health check - update timestamp every minute
+* * * * * root date > /app/logs/health.txt
+
+# Empty line required at end of crontab
