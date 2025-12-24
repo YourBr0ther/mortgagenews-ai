@@ -54,11 +54,14 @@ class NanoGPTService:
             for item in items
         ])
 
-        prompt = f"""Based on these mortgage AI news items from yesterday, write a 2-3 sentence executive summary highlighting the key trends and innovations in the mortgage AI space:
+        prompt = f"""You are briefing a Principal Engineer at a mortgage company. Based on these items from yesterday, write a 2-3 sentence executive summary focused on:
+- Workflow optimization opportunities
+- Lead generation innovations for loan officers
+- Document processing / cleaner file improvements
 
 {content}
 
-Write a professional, concise executive summary (2-3 sentences only):"""
+Write a strategic executive summary highlighting actionable opportunities (2-3 sentences only):"""
 
         try:
             return await self._call_api(prompt)
@@ -80,27 +83,33 @@ Write a professional, concise executive summary (2-3 sentences only):"""
 
     def _build_analysis_prompt(self, content: str) -> str:
         """Build the analysis prompt for ranking and summarization."""
-        return f"""You are a mortgage industry AI analyst. Analyze these news items and GitHub repositories about mortgage AI and fintech innovation.
+        return f"""You are a strategic technology advisor for a Principal Engineer at a mortgage company. Analyze these items and rank them by practical value for:
+
+1. WORKFLOW OPTIMIZATION - Process automation, integrations, efficiency gains
+2. LEAD GENERATION - Tools to help loan officers acquire and convert more leads
+3. CLEANER FILES - Document processing, OCR, data extraction, compliance automation
 
 CONTENT TO ANALYZE:
 {content}
 
 TASK:
-1. Rank these items by innovation and relevance to mortgage AI technology
-2. For each of the TOP 5 items, write exactly 2 sentences summarizing the key innovation
-3. Focus on: AI/ML applications, automation breakthroughs, new fintech tools, regulatory tech, underwriting innovations
+1. Select the TOP 5 most actionable items for a mortgage company's engineering team
+2. For each item, write exactly 2 sentences:
+   - Sentence 1: What it is and why it matters
+   - Sentence 2: How it could be applied or what action to consider
+3. Prioritize items that offer clear implementation opportunities
 
 RESPONSE FORMAT (JSON only, no other text):
 {{
   "ranked_items": [
     {{
       "index": 1,
-      "summary": "First sentence about the innovation. Second sentence with key details.",
+      "summary": "What this is and why it matters. Potential application or action to consider.",
       "relevance_score": 0.95
     }},
     {{
       "index": 3,
-      "summary": "First sentence. Second sentence.",
+      "summary": "Description of the innovation. Implementation consideration.",
       "relevance_score": 0.88
     }}
   ]

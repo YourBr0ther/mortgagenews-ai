@@ -16,7 +16,7 @@ class Config:
 
     # NewsAPI
     NEWSAPI_KEY: str = ""
-    NEWSAPI_QUERY: str = "mortgage AI OR mortgage automation OR mortgage fintech OR lending AI"
+    NEWSAPI_QUERY: str = "(mortgage OR lending OR loan) AND (AI OR automation OR OCR OR workflow OR lead generation OR document processing)"
 
     # NanoGPT
     NANOGPT_API_KEY: str = ""
@@ -52,7 +52,7 @@ class Config:
             NEWSAPI_KEY=os.environ.get("NEWSAPI_KEY", ""),
             NEWSAPI_QUERY=os.getenv(
                 "NEWSAPI_QUERY",
-                "mortgage AI OR mortgage automation OR mortgage fintech OR lending AI"
+                "(mortgage OR lending OR loan) AND (AI OR automation OR OCR OR workflow OR lead generation OR document processing)"
             ),
             NANOGPT_API_KEY=os.environ.get("NANOGPT_API_KEY", ""),
             NANOGPT_BASE_URL=os.getenv("NANOGPT_BASE_URL", "https://nano-gpt.com/api/v1"),

@@ -15,13 +15,22 @@ class GitHubCollector(BaseCollector):
 
     SEARCH_URL = "https://api.github.com/search/repositories"
 
-    # Search queries for mortgage AI repos
+    # Search queries for mortgage tech repos (principal engineer focus)
     QUERIES = [
-        "mortgage AI",
+        # Workflow & automation
         "mortgage automation",
-        "lending AI",
-        "loan underwriting machine learning",
-        "mortgage fintech"
+        "loan origination system",
+        "lending workflow",
+        # Document processing
+        "mortgage document OCR",
+        "loan document extraction",
+        "pdf extraction financial",
+        # Lead generation & CRM
+        "mortgage CRM",
+        "lead scoring lending",
+        # AI/ML for lending
+        "underwriting machine learning",
+        "credit decisioning AI"
     ]
 
     async def collect(self) -> List[ContentItem]:

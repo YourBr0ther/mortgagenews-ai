@@ -13,11 +13,18 @@ from src.models.article import ContentItem, SourceType
 class RSSCollector(BaseCollector):
     """Collects articles from RSS feeds."""
 
-    # Keywords to filter for mortgage/AI content
+    # Keywords to filter for mortgage tech content (principal engineer focus)
     KEYWORDS = [
-        "mortgage", "ai", "artificial intelligence", "automation",
-        "lending", "fintech", "underwriting", "loan", "machine learning",
-        "proptech", "real estate tech", "housing"
+        # Core mortgage terms
+        "mortgage", "lending", "loan", "underwriting",
+        # Workflow optimization
+        "automation", "workflow", "integration", "api", "process",
+        # Lead generation
+        "lead", "crm", "conversion", "marketing automation", "customer acquisition",
+        # Document/file processing
+        "ocr", "document", "extraction", "verification", "compliance",
+        # Technology
+        "ai", "artificial intelligence", "machine learning", "llm", "gpt"
     ]
 
     async def collect(self) -> List[ContentItem]:
