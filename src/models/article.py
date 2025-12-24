@@ -14,6 +14,13 @@ class SourceType(Enum):
     GITHUB = "github"
 
 
+class Category(Enum):
+    """Content category for principal engineer focus areas."""
+    WORKFLOW = "workflow"
+    LEADS = "leads"
+    FILES = "files"
+
+
 @dataclass
 class ContentItem:
     """Represents a news article or GitHub repository."""
@@ -26,6 +33,7 @@ class ContentItem:
     description: Optional[str] = None
     summary: Optional[str] = None  # LLM-generated summary
     relevance_score: float = 0.0  # LLM-assigned score
+    category: Optional[Category] = None  # Workflow, Leads, or Files
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""

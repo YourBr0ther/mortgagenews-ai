@@ -6,7 +6,7 @@ import aiohttp
 import json
 import logging
 from typing import List, Optional
-from src.models.article import ContentItem
+from src.models.article import ContentItem, Category
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +20,16 @@ class NanoGPTService:
         self.api_key = config.NANOGPT_API_KEY
         self.model = config.NANOGPT_MODEL
 
-    async def analyze_and_rank(self, items: List[ContentItem]) -> List[ContentItem]:
+    async def analyze_and_rank(self, items: List[ContentItem]) -> tuple[List[ContentItem], List[str]]:
         """
-        Analyze items and return top 5 ranked by innovation/relevance.
-        Also generates 2-sentence summaries for each.
+        Analyze items and return top 6 ranked by category and relevance.
+        Also generates 2-sentence summaries and TL;DR bullets.
+
+        Returns:
+            Tuple of (ranked_items, tldr_bullets)
         """
         if not items:
-            return []
+            return [], []
 
         # Prepare content for LLM
         content_text = self._prepare_content(items)
@@ -34,15 +37,16 @@ class NanoGPTService:
 
         try:
             response = await self._call_api(prompt)
-            ranked_items = self._parse_response(response, items)
-            return ranked_items[:5]
+            ranked_items, tldr = self._parse_response(response, items)
+            return ranked_items[:6], tldr
         except Exception as e:
             logger.error(f"LLM analysis failed: {e}")
-            # Fallback: return first 5 items with basic summaries
-            for item in items[:5]:
+            # Fallback: return first 6 items with basic summaries
+            for item in items[:6]:
                 if not item.summary:
                     item.summary = item.description[:200] if item.description else "No description available."
-            return items[:5]
+                item.category = Category.WORKFLOW  # Default
+            return items[:6], ["Check the full list for details."]
 
     async def generate_executive_summary(self, items: List[ContentItem]) -> str:
         """Generate an executive summary of all items."""
@@ -83,39 +87,47 @@ Write a strategic executive summary highlighting actionable opportunities (2-3 s
 
     def _build_analysis_prompt(self, content: str) -> str:
         """Build the analysis prompt for ranking and summarization."""
-        return f"""You are a strategic technology advisor for a Principal Engineer at a mortgage company. Analyze these items and rank them by practical value for:
+        return f"""You are a strategic technology advisor for a Principal Engineer at a mortgage company. Analyze these items and categorize them by:
 
-1. WORKFLOW OPTIMIZATION - Process automation, integrations, efficiency gains
-2. LEAD GENERATION - Tools to help loan officers acquire and convert more leads
-3. CLEANER FILES - Document processing, OCR, data extraction, compliance automation
+- WORKFLOW: Process automation, integrations, efficiency, LOS improvements
+- LEADS: Lead generation, CRM, marketing automation, loan officer tools
+- FILES: Document processing, OCR, data extraction, compliance, verification
 
 CONTENT TO ANALYZE:
 {content}
 
 TASK:
-1. Select the TOP 5 most actionable items for a mortgage company's engineering team
-2. For each item, write exactly 2 sentences:
+1. Select the TOP 6 most actionable items (aim for 2 per category if possible)
+2. Assign each item to exactly ONE category: "workflow", "leads", or "files"
+3. For each item, write exactly 2 sentences:
    - Sentence 1: What it is and why it matters
-   - Sentence 2: How it could be applied or what action to consider
-3. Prioritize items that offer clear implementation opportunities
+   - Sentence 2: Specific action or next step to consider
+4. Also provide 3 TL;DR bullet points (one key insight per category)
 
 RESPONSE FORMAT (JSON only, no other text):
 {{
+  "tldr": [
+    "Workflow: One sentence key takeaway",
+    "Leads: One sentence key takeaway",
+    "Files: One sentence key takeaway"
+  ],
   "ranked_items": [
     {{
       "index": 1,
-      "summary": "What this is and why it matters. Potential application or action to consider.",
+      "category": "workflow",
+      "summary": "What this is and why it matters. Specific action to consider.",
       "relevance_score": 0.95
     }},
     {{
       "index": 3,
+      "category": "leads",
       "summary": "Description of the innovation. Implementation consideration.",
       "relevance_score": 0.88
     }}
   ]
 }}
 
-Return ONLY valid JSON. Include exactly 5 items. Use the original index numbers from the content above."""
+Return ONLY valid JSON. Include exactly 6 items. Use original index numbers."""
 
     async def _call_api(self, prompt: str) -> str:
         """Call NanoGPT API."""
@@ -145,8 +157,8 @@ Return ONLY valid JSON. Include exactly 5 items. Use the original index numbers 
                     error = await resp.text()
                     raise Exception(f"API error {resp.status}: {error[:200]}")
 
-    def _parse_response(self, response: str, items: List[ContentItem]) -> List[ContentItem]:
-        """Parse LLM response and update items with summaries and scores."""
+    def _parse_response(self, response: str, items: List[ContentItem]) -> tuple[List[ContentItem], List[str]]:
+        """Parse LLM response and update items with summaries, scores, and categories."""
         try:
             # Extract JSON from response (handle markdown code blocks)
             json_str = response
@@ -158,16 +170,29 @@ Return ONLY valid JSON. Include exactly 5 items. Use the original index numbers 
             data = json.loads(json_str.strip())
             ranked_items = []
 
+            # Parse TL;DR
+            tldr = data.get("tldr", [])
+
+            # Category mapping
+            category_map = {
+                "workflow": Category.WORKFLOW,
+                "leads": Category.LEADS,
+                "files": Category.FILES
+            }
+
             for ranked in data.get("ranked_items", []):
                 idx = ranked["index"] - 1  # Convert to 0-indexed
                 if 0 <= idx < len(items):
                     item = items[idx]
                     item.summary = ranked.get("summary", item.description)
                     item.relevance_score = ranked.get("relevance_score", 0.5)
+                    # Set category
+                    cat_str = ranked.get("category", "workflow").lower()
+                    item.category = category_map.get(cat_str, Category.WORKFLOW)
                     ranked_items.append(item)
 
             logger.info(f"Successfully parsed {len(ranked_items)} ranked items from LLM")
-            return ranked_items
+            return ranked_items, tldr
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM JSON response: {e}")
@@ -175,5 +200,5 @@ Return ONLY valid JSON. Include exactly 5 items. Use the original index numbers 
         except Exception as e:
             logger.error(f"Failed to parse LLM response: {e}")
 
-        # Fallback: return first 5 items
-        return items[:5]
+        # Fallback: return first 6 items
+        return items[:6], []

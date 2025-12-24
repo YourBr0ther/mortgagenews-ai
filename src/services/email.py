@@ -7,9 +7,16 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List
-from src.models.article import ContentItem
+from src.models.article import ContentItem, Category
 
 logger = logging.getLogger(__name__)
+
+# Category styling
+CATEGORY_CONFIG = {
+    Category.WORKFLOW: {"label": "WORKFLOW", "color": "#2563eb", "icon": "⚙️", "bg": "#eff6ff"},
+    Category.LEADS: {"label": "LEADS", "color": "#16a34a", "icon": "📈", "bg": "#f0fdf4"},
+    Category.FILES: {"label": "FILES", "color": "#9333ea", "icon": "📄", "bg": "#faf5ff"},
+}
 
 
 class EmailService:
@@ -19,8 +26,6 @@ class EmailService:
         self.config = config
         self.from_email = config.EMAIL_FROM
         self.to_email = config.EMAIL_TO
-
-        # Determine which service to use
         self.use_gmail = bool(config.GMAIL_APP_PASSWORD)
         self.use_sendgrid = bool(config.SENDGRID_API_KEY) and not self.use_gmail
 
@@ -28,22 +33,13 @@ class EmailService:
         self,
         executive_summary: str,
         items: List[ContentItem],
+        tldr: List[str],
         date_str: str
     ) -> bool:
-        """
-        Send the newsletter via email.
-
-        Args:
-            executive_summary: The executive summary text
-            items: List of top ContentItem objects
-            date_str: Formatted date string for the subject
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Send the newsletter via email."""
         subject = f"Mortgage AI Briefing - {date_str}"
-        html_content = self._format_html(executive_summary, items)
-        plain_content = self._format_plain(executive_summary, items)
+        html_content = self._format_html(executive_summary, items, tldr)
+        plain_content = self._format_plain(executive_summary, items, tldr)
 
         if self.use_gmail:
             return self._send_gmail(subject, plain_content, html_content)
@@ -112,37 +108,60 @@ class EmailService:
             logger.error(f"SendGrid send failed: {e}")
             return False
 
-    def _format_html(self, summary: str, items: List[ContentItem]) -> str:
-        """Format the newsletter as HTML email."""
-        items_html = ""
-        for i, item in enumerate(items, 1):
-            # Get summary sentences
-            if item.summary:
-                sentences = self._split_sentences(item.summary)
-                what = sentences[0] if sentences else ""
-                action = sentences[1] if len(sentences) > 1 else ""
-            else:
-                what = item.description[:200] if item.description else ""
-                action = ""
+    def _format_html(self, summary: str, items: List[ContentItem], tldr: List[str]) -> str:
+        """Format the newsletter as HTML email with categories and TL;DR."""
 
-            items_html += f"""
-            <tr>
-                <td style="padding: 20px 0; border-bottom: 1px solid #e0e0e0;">
-                    <h3 style="margin: 0 0 8px 0; color: #1a1a1a; font-size: 16px;">
-                        {i}. {self._escape_html(item.title)}
-                    </h3>
-                    <p style="margin: 0 0 12px 0; color: #666; font-size: 13px;">
+        # Build TL;DR section
+        tldr_html = ""
+        for bullet in tldr:
+            tldr_html += f'<li style="margin-bottom: 8px; color: #1a1a1a; font-size: 14px;">{self._escape_html(bullet)}</li>'
+
+        # Group items by category
+        grouped = {Category.WORKFLOW: [], Category.LEADS: [], Category.FILES: []}
+        for item in items:
+            cat = item.category or Category.WORKFLOW
+            grouped[cat].append(item)
+
+        # Build category sections
+        sections_html = ""
+        for category in [Category.WORKFLOW, Category.LEADS, Category.FILES]:
+            cat_items = grouped[category]
+            if not cat_items:
+                continue
+
+            config = CATEGORY_CONFIG[category]
+            items_html = ""
+
+            for item in cat_items:
+                sentences = self._split_sentences(item.summary) if item.summary else []
+                what = sentences[0] if sentences else (item.description[:200] if item.description else "")
+                action = sentences[1] if len(sentences) > 1 else ""
+
+                items_html += f"""
+                <div style="padding: 16px 0; border-bottom: 1px solid #e5e7eb;">
+                    <h4 style="margin: 0 0 6px 0; color: #1a1a1a; font-size: 15px; font-weight: 600;">
+                        {self._escape_html(item.title[:80])}
+                    </h4>
+                    <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 12px;">
                         {self._escape_html(item.source)}
                     </p>
-                    <p style="margin: 0 0 8px 0; color: #333; font-size: 14px; line-height: 1.5;">
+                    <p style="margin: 0 0 6px 0; color: #374151; font-size: 14px; line-height: 1.5;">
                         {self._escape_html(what)}
                     </p>
-                    {"<p style='margin: 0 0 12px 0; color: #0066cc; font-size: 14px; font-weight: 500;'>→ " + self._escape_html(action) + "</p>" if action else ""}
-                    <a href="{item.url}" style="color: #0066cc; font-size: 13px; text-decoration: none;">
+                    {"<p style='margin: 0 0 10px 0; color: " + config['color'] + "; font-size: 14px; font-weight: 500;'>→ " + self._escape_html(action) + "</p>" if action else ""}
+                    <a href="{item.url}" style="color: {config['color']}; font-size: 13px; text-decoration: none;">
                         Read more →
                     </a>
-                </td>
-            </tr>
+                </div>
+                """
+
+            sections_html += f"""
+            <div style="margin-bottom: 24px;">
+                <div style="display: inline-block; background-color: {config['bg']}; color: {config['color']}; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                    {config['icon']} {config['label']}
+                </div>
+                {items_html}
+            </div>
             """
 
         return f"""
@@ -152,51 +171,59 @@ class EmailService:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 24px 0;">
         <tr>
             <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+
                     <!-- Header -->
                     <tr>
-                        <td style="background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%); padding: 30px 40px;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+                        <td style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); padding: 32px 40px;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700;">
                                 Mortgage AI Briefing
                             </h1>
-                            <p style="margin: 8px 0 0 0; color: #a0c4ff; font-size: 14px;">
-                                Workflow • Leads • Clean Files
+                            <p style="margin: 6px 0 0 0; color: #93c5fd; font-size: 14px;">
+                                ⚙️ Workflow &nbsp;•&nbsp; 📈 Leads &nbsp;•&nbsp; 📄 Clean Files
                             </p>
+                        </td>
+                    </tr>
+
+                    <!-- TL;DR Section -->
+                    <tr>
+                        <td style="padding: 28px 40px; background-color: #fefce8; border-bottom: 3px solid #fde047;">
+                            <h2 style="margin: 0 0 14px 0; color: #854d0e; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">
+                                ⚡ TL;DR — 30 Second Scan
+                            </h2>
+                            <ul style="margin: 0; padding-left: 20px;">
+                                {tldr_html}
+                            </ul>
                         </td>
                     </tr>
 
                     <!-- Executive Summary -->
                     <tr>
-                        <td style="padding: 30px 40px; background-color: #f8fafc;">
-                            <h2 style="margin: 0 0 12px 0; color: #1a365d; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                        <td style="padding: 28px 40px; background-color: #f8fafc;">
+                            <h2 style="margin: 0 0 12px 0; color: #1e3a5f; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">
                                 Strategic Summary
                             </h2>
-                            <p style="margin: 0; color: #333; font-size: 15px; line-height: 1.6;">
+                            <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
                                 {self._escape_html(summary)}
                             </p>
                         </td>
                     </tr>
 
-                    <!-- Items -->
+                    <!-- Category Sections -->
                     <tr>
-                        <td style="padding: 20px 40px;">
-                            <h2 style="margin: 0 0 20px 0; color: #1a365d; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
-                                Top 5 Actionable Items
-                            </h2>
-                            <table width="100%" cellpadding="0" cellspacing="0">
-                                {items_html}
-                            </table>
+                        <td style="padding: 28px 40px;">
+                            {sections_html}
                         </td>
                     </tr>
 
                     <!-- Footer -->
                     <tr>
-                        <td style="padding: 20px 40px; background-color: #f8fafc; text-align: center;">
-                            <p style="margin: 0; color: #666; font-size: 12px;">
+                        <td style="padding: 20px 40px; background-color: #1e3a5f; text-align: center;">
+                            <p style="margin: 0; color: #93c5fd; font-size: 12px;">
                                 Curated daily for mortgage technology leaders
                             </p>
                         </td>
@@ -209,40 +236,59 @@ class EmailService:
 </html>
 """
 
-    def _format_plain(self, summary: str, items: List[ContentItem]) -> str:
+    def _format_plain(self, summary: str, items: List[ContentItem], tldr: List[str]) -> str:
         """Format the newsletter as plain text."""
         lines = [
             "MORTGAGE AI BRIEFING",
-            "=" * 40,
+            "=" * 50,
             "",
-            "STRATEGIC SUMMARY",
-            "-" * 20,
-            summary,
-            "",
-            "=" * 40,
-            "TOP 5 ACTIONABLE ITEMS",
-            "=" * 40,
-            ""
+            "TL;DR — 30 SECOND SCAN",
+            "-" * 30,
         ]
 
-        for i, item in enumerate(items, 1):
-            lines.append(f"{i}. {item.title}")
-            lines.append(f"   [{item.source}]")
-            lines.append("")
+        for bullet in tldr:
+            lines.append(f"• {bullet}")
+        lines.append("")
 
-            if item.summary:
-                sentences = self._split_sentences(item.summary)
-                for j, sentence in enumerate(sentences[:2]):
-                    if sentence.strip():
-                        prefix = ">" if j == 0 else "→"
-                        lines.append(f"   {prefix} {sentence.strip()}")
+        lines.extend([
+            "STRATEGIC SUMMARY",
+            "-" * 30,
+            summary,
+            "",
+            "=" * 50,
+        ])
 
-            lines.append("")
-            lines.append(f"   {item.url}")
-            lines.append("")
-            lines.append("-" * 40)
-            lines.append("")
+        # Group by category
+        grouped = {Category.WORKFLOW: [], Category.LEADS: [], Category.FILES: []}
+        for item in items:
+            cat = item.category or Category.WORKFLOW
+            grouped[cat].append(item)
 
+        for category in [Category.WORKFLOW, Category.LEADS, Category.FILES]:
+            cat_items = grouped[category]
+            if not cat_items:
+                continue
+
+            config = CATEGORY_CONFIG[category]
+            lines.append("")
+            lines.append(f"{config['icon']} {config['label']}")
+            lines.append("-" * 30)
+
+            for item in cat_items:
+                lines.append(f"\n{item.title}")
+                lines.append(f"[{item.source}]")
+
+                if item.summary:
+                    sentences = self._split_sentences(item.summary)
+                    for j, sentence in enumerate(sentences[:2]):
+                        if sentence.strip():
+                            prefix = ">" if j == 0 else "→"
+                            lines.append(f"{prefix} {sentence.strip()}")
+
+                lines.append(item.url)
+                lines.append("")
+
+        lines.append("=" * 50)
         lines.append("Curated for mortgage tech leaders")
 
         return "\n".join(lines)

@@ -1,3 +1,3 @@
-from .article import ContentItem, SourceType
+from .article import ContentItem, SourceType, Category
 
-__all__ = ["ContentItem", "SourceType"]
+__all__ = ["ContentItem", "SourceType", "Category"]

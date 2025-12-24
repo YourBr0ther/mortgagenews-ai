@@ -80,7 +80,7 @@ async def main():
         # Step 3: Analyze and rank with LLM
         logger.info("Step 3: Analyzing content with NanoGPT...")
         llm_service = NanoGPTService(config)
-        top_items = await llm_service.analyze_and_rank(unique_items)
+        top_items, tldr = await llm_service.analyze_and_rank(unique_items)
 
         if not top_items:
             logger.warning("LLM analysis returned no items. Exiting.")
@@ -88,7 +88,10 @@ async def main():
 
         logger.info(f"Selected top {len(top_items)} items:")
         for i, item in enumerate(top_items, 1):
-            logger.info(f"  {i}. {item.title[:60]}...")
+            cat = item.category.value if item.category else "?"
+            logger.info(f"  {i}. [{cat}] {item.title[:55]}...")
+
+        logger.info(f"TL;DR: {len(tldr)} bullet points")
 
         # Step 4: Generate executive summary
         logger.info("Step 4: Generating executive summary...")
@@ -104,7 +107,7 @@ async def main():
         if config.has_email():
             logger.info("  - Sending via email...")
             email_service = EmailService(config)
-            if email_service.send_newsletter(executive_summary, top_items, date_str):
+            if email_service.send_newsletter(executive_summary, top_items, tldr, date_str):
                 logger.info(f"  - Email sent to {config.EMAIL_TO}")
                 success = True
             else:
@@ -114,7 +117,7 @@ async def main():
         if config.has_pushbullet():
             logger.info("  - Sending via Pushbullet...")
             pushbullet = PushbulletService(config)
-            if await pushbullet.send_newsletter(executive_summary, top_items, date_str):
+            if await pushbullet.send_newsletter(executive_summary, top_items, tldr, date_str):
                 logger.info("  - Pushbullet notification sent")
                 success = True
             else:
