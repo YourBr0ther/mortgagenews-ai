@@ -14,6 +14,7 @@ from src.collectors.rss import RSSCollector
 from src.collectors.github import GitHubCollector
 from src.services.llm import NanoGPTService
 from src.services.pushbullet import PushbulletService
+from src.services.email import EmailService
 from src.utils.logger import setup_logging
 from src.utils.dedup import deduplicate_items
 
@@ -95,16 +96,36 @@ async def main():
         logger.info(f"Summary: {executive_summary[:100]}...")
 
         # Step 5: Send newsletter
-        logger.info("Step 5: Sending newsletter via Pushbullet...")
-        pushbullet = PushbulletService(config)
-        success = await pushbullet.send_newsletter(executive_summary, top_items, date_str)
+        logger.info("Step 5: Delivering newsletter...")
+
+        success = False
+
+        # Email delivery (primary)
+        if config.has_email():
+            logger.info("  - Sending via email...")
+            email_service = EmailService(config)
+            if email_service.send_newsletter(executive_summary, top_items, date_str):
+                logger.info(f"  - Email sent to {config.EMAIL_TO}")
+                success = True
+            else:
+                logger.error("  - Email delivery failed")
+
+        # Pushbullet delivery (secondary/backup)
+        if config.has_pushbullet():
+            logger.info("  - Sending via Pushbullet...")
+            pushbullet = PushbulletService(config)
+            if await pushbullet.send_newsletter(executive_summary, top_items, date_str):
+                logger.info("  - Pushbullet notification sent")
+                success = True
+            else:
+                logger.error("  - Pushbullet delivery failed")
 
         if success:
             logger.info("=" * 50)
-            logger.info("Newsletter sent successfully!")
+            logger.info("Newsletter delivered successfully!")
             logger.info("=" * 50)
         else:
-            logger.error("Failed to send newsletter")
+            logger.error("All delivery methods failed")
             sys.exit(1)
 
     except Exception as e:
